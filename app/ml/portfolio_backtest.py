@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(__file__).resolve().parent / "lgbm_model.pkl"
 _model = None
+_price_cache: dict[tuple[str, str, str], pd.DataFrame] = {}
 
 
 def get_ranking_model():
@@ -29,6 +30,36 @@ def get_ranking_model():
     _model = joblib.load(MODEL_PATH)
     logger.info("Loaded ranking model from %s", MODEL_PATH)
     return _model
+
+
+def _download_price_data(symbol: str, period: str, interval: str = "1d") -> pd.DataFrame | None:
+    """Cached yfinance fetch to reduce duplicate network calls on free tier."""
+    key = (symbol, period, interval)
+    if key in _price_cache:
+        return _price_cache[key]
+
+    try:
+        df = yf.download(
+            symbol,
+            period=period,
+            interval=interval,
+            progress=False,
+        )
+    except Exception as exc:
+        logger.warning("Download failed for %s: %s", symbol, exc)
+        _price_cache[key] = None
+        return None
+
+    if df is None or df.empty:
+        _price_cache[key] = None
+        return None
+
+    # FIX MULTIINDEX
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    _price_cache[key] = df
+    return df
 
 
 # =========================
@@ -64,25 +95,13 @@ FEATURES = [
 def load_stock_data(symbol):
 
     try:
-
-        df = yf.download(
-            symbol,
+        df = _download_price_data(
+            symbol=symbol,
             period="2y",
             interval="1d",
-            progress=False
         )
 
-        # FIX MULTIINDEX
-        if isinstance(
-            df.columns,
-            pd.MultiIndex
-        ):
-            df.columns = (
-                df.columns
-                .get_level_values(0)
-            )
-
-        if df.empty or len(df) < 100:
+        if df is None or df.empty or len(df) < 100:
             return None
 
         # ADD FEATURES
@@ -248,10 +267,12 @@ def build_feature_row(df):
 def rank_stocks():
 
     rankings = []
+    _price_cache.clear()
 
-    # Render free tier optimization:
-    # Use a compact large-cap universe to reduce inference + network load.
-    # This keeps response schemas identical while improving endpoint latency.
+    # Render free-tier timeout optimization:
+    # - compact NIFTY_50 subset
+    # - cached downloads (avoid duplicate requests)
+    # - skip failures immediately and continue
     for symbol in NIFTY_50:
 
         try:
@@ -332,20 +353,26 @@ def simulate_portfolio(
 
         try:
 
-            df = yf.download(
-                symbol,
-                period="1mo",
+            # Reuse cached 2Y series from ranking pass and derive recent 1M return.
+            df = _download_price_data(
+                symbol=symbol,
+                period="2y",
                 interval="1d",
-                progress=False
             )
+            if df is None:
+                continue
 
             close_prices = _flatten_close(df)
             if len(close_prices) < 2:
                 continue
 
-            price_series[symbol] = close_prices
-            start_price = float(close_prices.iloc[0])
-            end_price = float(close_prices.iloc[-1])
+            recent = close_prices.tail(22)
+            if len(recent) < 2:
+                continue
+
+            price_series[symbol] = recent
+            start_price = float(recent.iloc[0])
+            end_price = float(recent.iloc[-1])
             if start_price <= 0:
                 continue
 
