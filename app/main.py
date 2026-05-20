@@ -1,5 +1,7 @@
 import logging
+import json
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,11 +15,36 @@ from app.db.session import check_database_connection, get_db
 
 logger = logging.getLogger(__name__)
 
+CACHE_FILES = (
+    Path("data_cache/rankings.json"),
+    Path("data_cache/portfolio.json"),
+)
+
+
+def _log_cache_status() -> None:
+    """
+    Render production startup diagnostics:
+    confirm cache file existence and JSON readability.
+    """
+    for cache_path in CACHE_FILES:
+        if not cache_path.exists():
+            logger.warning("Cache missing at startup: %s", cache_path)
+            continue
+        try:
+            payload = json.loads(cache_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                logger.info("Cache load success: %s", cache_path)
+            else:
+                logger.warning("Cache load failed (invalid payload type): %s", cache_path)
+        except Exception as exc:
+            logger.warning("Cache load failed for %s: %s", cache_path, exc)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("Starting Quant ML API (env=%s)", settings.ENVIRONMENT)
+    _log_cache_status()
 
     db_status = check_database_connection()
     if db_status.get("ok"):
