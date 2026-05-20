@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from app.core.data.nifty250 import NIFTY_250
+from app.core.data.nifty50 import NIFTY_50
 from app.core.portfolio.metrics import (
     _flatten_close,
     compute_portfolio_analytics,
@@ -249,7 +249,10 @@ def rank_stocks():
 
     rankings = []
 
-    for symbol in NIFTY_250:
+    # Render free tier optimization:
+    # Use a compact large-cap universe to reduce inference + network load.
+    # This keeps response schemas identical while improving endpoint latency.
+    for symbol in NIFTY_50:
 
         try:
 
