@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
+    ENABLE_LEADERBOARD: str = "true"
     # Comma-separated origins, e.g. https://your-app.vercel.app,http://localhost:5173
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173"
 

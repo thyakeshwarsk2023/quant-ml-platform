@@ -7,15 +7,17 @@ from fastapi import (
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-import uuid
+import json
 import traceback
 import logging
 import threading
+from pathlib import Path
 
 from app.db.session import (
     get_db,
     SessionLocal
 )
+from app.core.config import settings
 
 from app.services.backtest_service import (
     run_multi_strategy
@@ -33,15 +35,9 @@ from app.core.utils.explainer import (
     explain_strategy
 )
 
-from app.ml.portfolio_backtest import (
-    rank_stocks,
-    simulate_portfolio
-)
-
 from app.core.utils.serialize import (
     equity_points,
     leaderboard_rows,
-    ranking_records,
     safe_float,
     sanitize_portfolio_analytics,
     sanitize_stock_records,
@@ -54,6 +50,21 @@ from app.core.utils.serialize import (
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+CACHE_DIR = Path("data_cache")
+RANKINGS_CACHE_PATH = CACHE_DIR / "rankings.json"
+PORTFOLIO_CACHE_PATH = CACHE_DIR / "portfolio.json"
+
+
+def _load_json_cache(path: Path):
+    """Load precomputed cache payload; return None if unavailable/corrupt."""
+    try:
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Cache read failed for %s: %s", path, exc)
+        return None
 
 
 # =========================
@@ -430,6 +441,9 @@ def equity(
 def leaderboard(
     db: Session = Depends(get_db)
 ):
+    # Optional free-tier safeguard: skip expensive leaderboard query.
+    if str(getattr(settings, "ENABLE_LEADERBOARD", "true")).lower() in {"0", "false", "no"}:
+        return []
 
     try:
 
@@ -469,44 +483,35 @@ def leaderboard(
 # =========================
 @router.get("/rankings")
 def rankings(top_k: int = 10):
-
-    try:
-
-        ranking_df = rank_stocks()
-
-        top = ranking_df.head(top_k)
-
+    # Render free-tier optimization:
+    # Serve precomputed rankings cache and avoid repeated ML inference per request.
+    cached = _load_json_cache(RANKINGS_CACHE_PATH)
+    if not cached:
         return {
-
-            "status":
-                "success",
-
-            "top_k":
-                top_k,
-
-            "results":
-                ranking_records(top)
+            "status": "error",
+            "top_k": top_k,
+            "results": [],
+            "error": "Rankings cache unavailable. Please run generate_rankings_cache.py",
         }
 
-    except FileNotFoundError as e:
-
-        logger.error(
-            f"❌ Model file not found: {e}"
-        )
+    try:
+        cached_results = cached.get("results", [])
+        sanitized = []
+        for row in cached_results:
+            if not isinstance(row, dict):
+                continue
+            sanitized.append(
+                {
+                    "symbol": str(row.get("symbol", "")),
+                    "score": round(safe_float(row.get("score")), 4),
+                }
+            )
+        top = sanitized[: max(int(top_k), 0)]
 
         return {
-
-            "status":
-                "error",
-
-            "top_k":
-                top_k,
-
-            "results":
-                [],
-
-            "error":
-                "Model file not found. Please train the model first."
+            "status": "success",
+            "top_k": top_k,
+            "results": top,
         }
 
     except Exception as e:
@@ -538,15 +543,22 @@ def rankings(top_k: int = 10):
 # =========================
 @router.get("/portfolio")
 def portfolio(top_k: int = 10):
+    # Render free-tier optimization:
+    # Use precomputed portfolio cache to keep endpoint response near-instant.
+    cached = _load_json_cache(PORTFOLIO_CACHE_PATH)
+    if not cached:
+        return {
+            "status": "error",
+            "portfolio_size": 0,
+            "portfolio_return": 0,
+            "selected_stocks": [],
+            "analytics": sanitize_portfolio_analytics(None),
+            "error": "Portfolio cache unavailable. Please run generate_rankings_cache.py",
+        }
 
     try:
-
-        result = simulate_portfolio(
-            top_k=top_k
-        )
-
         selected = sanitize_stock_records(
-            result.get(
+            cached.get(
                 "selected_stocks",
                 []
             )
@@ -562,7 +574,7 @@ def portfolio(top_k: int = 10):
 
             "portfolio_return":
                 safe_float(
-                    result.get(
+                    cached.get(
                         "portfolio_return",
                         0
                     )
@@ -573,35 +585,8 @@ def portfolio(top_k: int = 10):
 
             "analytics":
                 sanitize_portfolio_analytics(
-                    result.get("analytics")
+                    cached.get("analytics")
                 ),
-        }
-
-    except FileNotFoundError as e:
-
-        logger.error(
-            f"❌ Model file not found: {e}"
-        )
-
-        return {
-
-            "status":
-                "error",
-
-            "portfolio_size":
-                0,
-
-            "portfolio_return":
-                0,
-
-            "selected_stocks":
-                [],
-
-            "analytics":
-                sanitize_portfolio_analytics(None),
-
-            "error":
-                "Model file not found. Please train the model first."
         }
 
     except Exception as e:
