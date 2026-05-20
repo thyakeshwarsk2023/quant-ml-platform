@@ -3,7 +3,7 @@ import { resolveApiBaseUrl } from "../config/api.js";
 
 const API = axios.create({
   baseURL: resolveApiBaseUrl(),
-  timeout: 30000,
+  timeout: 120000,
   headers: {
     "Content-Type": "application/json",
   },
