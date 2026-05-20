@@ -1,0 +1,16 @@
+.env
+.env.local
+.env.*.local
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+data_cache/
+*.log
+
+# ML / local artifacts (uncomment if models should not be in git)
+# app/ml/*.pkl
+# app/ml/*.pt
