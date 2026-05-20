@@ -61,7 +61,11 @@ def _load_json_cache(path: Path):
     try:
         if not path.exists():
             return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            logger.warning("Cache payload is not an object for %s", path)
+            return None
+        return payload
     except Exception as exc:
         logger.warning("Cache read failed for %s: %s", path, exc)
         return None
