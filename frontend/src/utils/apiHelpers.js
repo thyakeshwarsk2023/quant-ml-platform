@@ -76,6 +76,13 @@ export function parseEquityResponse(data) {
 }
 
 export function getApiErrorMessage(error, fallback = "Request failed") {
+  if (
+    error?.code === "NO_API_BASE" ||
+    error?.message === "VITE_API_BASE_URL_NOT_SET"
+  ) {
+    return "API URL not configured. Set VITE_API_BASE_URL in deployment settings.";
+  }
+
   const detail = error?.response?.data?.detail;
 
   if (typeof detail === "string") {
@@ -84,6 +91,11 @@ export function getApiErrorMessage(error, fallback = "Request failed") {
 
   if (Array.isArray(detail)) {
     return detail.map((item) => item?.msg ?? String(item)).join(", ");
+  }
+
+  const status = error?.response?.status;
+  if (status === 404) {
+    return "Data unavailable for this request.";
   }
 
   return error?.message || fallback;

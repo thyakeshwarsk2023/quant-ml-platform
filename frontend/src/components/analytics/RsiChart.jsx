@@ -25,7 +25,7 @@ export default function RsiChart({ bars = [] }) {
 
   if (!chartData.length) {
     return (
-      <ChartFrame title="RSI" badge="14">
+      <ChartFrame title="RSI" badge="14" chartHeightPx={140}>
         <div className="h-full flex items-center justify-center text-xs font-mono text-terminal-muted">
           RSI unavailable
         </div>
@@ -34,7 +34,7 @@ export default function RsiChart({ bars = [] }) {
   }
 
   return (
-    <ChartFrame title="RSI" subtitle="Relative Strength Index" badge="14" height="h-[160px]">
+    <ChartFrame title="RSI" subtitle="Relative Strength Index" badge="14" chartHeightPx={140}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...getRechartsGridProps()} />

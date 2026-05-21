@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { startScan, getScanStatus, getScanResults } from "../api/api";
+import { startScan, getScanStatus, getScanResults, isProductionApiConfigured } from "../api/api";
 
 export default function ScanPanel() {
   const [jobId, setJobId] = useState(null);
@@ -10,6 +10,10 @@ export default function ScanPanel() {
 
   // 🔥 START SCAN
   const handleScan = async () => {
+    if (import.meta.env.PROD && !isProductionApiConfigured()) {
+      setError("Scanner requires VITE_API_BASE_URL.");
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -19,7 +23,9 @@ export default function ScanPanel() {
       const res = await startScan();
       setJobId(res.data.job_id);
     } catch (e) {
-      console.error(e);
+      if (import.meta.env.DEV) {
+        console.error(e);
+      }
       const status = e?.response?.status;
       setError(
         status === 404

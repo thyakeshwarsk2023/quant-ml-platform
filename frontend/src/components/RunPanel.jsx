@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { runBacktest } from "../api/api";
+import { runBacktest, isProductionApiConfigured } from "../api/api";
 import { getApiErrorMessage } from "../utils/apiHelpers";
 import TerminalPanel from "./ui/TerminalPanel";
 
@@ -9,7 +9,13 @@ export default function RunPanel({ setRunId, compact = false }) {
   const [error, setError] = useState(null);
   const [lastRunId, setLastRunId] = useState(null);
 
+  const apiDisabled = import.meta.env.PROD && !isProductionApiConfigured();
+
   const handleRun = async () => {
+    if (apiDisabled) {
+      setError("Backtest requires VITE_API_BASE_URL in production.");
+      return;
+    }
     if (!symbol || symbol.trim().length < 1) {
       setError("Enter a valid symbol");
       return;
@@ -32,7 +38,9 @@ export default function RunPanel({ setRunId, compact = false }) {
         setRunId(runId);
       }
     } catch (err) {
-      console.error("Run error:", err);
+      if (import.meta.env.DEV) {
+        console.error("Run error:", err);
+      }
       setError(getApiErrorMessage(err, "Failed to start backtest"));
     } finally {
       setLoading(false);
@@ -61,7 +69,7 @@ export default function RunPanel({ setRunId, compact = false }) {
           <button
             type="button"
             onClick={handleRun}
-            disabled={loading}
+            disabled={loading || apiDisabled}
             className="terminal-btn shrink-0"
           >
             {loading ? "..." : "Run"}

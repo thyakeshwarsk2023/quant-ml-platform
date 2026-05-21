@@ -10,6 +10,7 @@ import AiForecastSection from "../components/analytics/AiForecastSection";
 import RecommendationCard from "../components/analytics/RecommendationCard";
 import useStockAnalytics from "../hooks/useStockAnalytics";
 import { DEFAULT_OVERLAYS, formatPrice } from "../utils/analyticsHelpers";
+import { isProductionApiConfigured } from "../api/api";
 
 const PERIODS = [
   { id: "6mo", label: "6M" },
@@ -22,6 +23,8 @@ export default function AnalyticsPage() {
   const [overlays, setOverlays] = useState(DEFAULT_OVERLAYS);
   const { symbol, period, setPeriod, data, loading, error, fetchAnalytics } =
     useStockAnalytics("AAPL");
+
+  const apiOff = import.meta.env.PROD && !isProductionApiConfigured();
 
   const quote = data?.quote ?? {};
   const bars = data?.bars ?? [];
@@ -67,6 +70,13 @@ export default function AnalyticsPage() {
             )}
           </div>
         </header>
+
+        {apiOff && (
+          <div className="mb-4 rounded-sm border border-terminal-gold/30 bg-terminal-gold/5 px-3 py-2 text-xs font-mono text-terminal-muted">
+            Live analytics disabled: set <span className="text-terminal-cyan">VITE_API_BASE_URL</span> to
+            your API URL.
+          </div>
+        )}
 
         <form
           onSubmit={handleSubmit}

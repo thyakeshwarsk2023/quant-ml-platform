@@ -2,7 +2,8 @@ export default function ChartFrame({
   title,
   subtitle,
   badge,
-  height = "h-[280px]",
+  /** Explicit pixel height for Recharts (avoids width/height -1 in production). */
+  chartHeightPx = 280,
   children,
   footer,
 }) {
@@ -27,7 +28,12 @@ export default function ChartFrame({
           )}
         </div>
       )}
-      <div className={`${height} w-full px-2 py-2`}>{children}</div>
+      <div
+        className="w-full px-2 py-2"
+        style={{ height: chartHeightPx, minHeight: 200, minWidth: 0 }}
+      >
+        {children}
+      </div>
       {footer && (
         <div className="px-3 py-1.5 border-t border-terminal-border/40 text-[10px] font-mono text-terminal-muted">
           {footer}

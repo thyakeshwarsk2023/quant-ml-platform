@@ -20,7 +20,7 @@ import { formatVolume, shortDate } from "../../utils/analyticsHelpers";
 export default function VolumeChart({ bars = [] }) {
   if (!bars.length) {
     return (
-      <ChartFrame title="Volume" badge="VOL">
+      <ChartFrame title="Volume" badge="VOL" chartHeightPx={120}>
         <div className="h-full flex items-center justify-center text-xs font-mono text-terminal-muted">
           No volume data
         </div>
@@ -36,7 +36,7 @@ export default function VolumeChart({ bars = [] }) {
   }));
 
   return (
-    <ChartFrame title="Volume" badge="VOL" height="h-[140px]">
+    <ChartFrame title="Volume" badge="VOL" chartHeightPx={120}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...getRechartsGridProps()} />
