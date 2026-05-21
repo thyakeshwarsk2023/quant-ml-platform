@@ -23,7 +23,7 @@ import { shortDate } from "../../utils/analyticsHelpers";
 export default function CandlestickChart({ bars = [], overlays = {} }) {
   if (!bars.length) {
     return (
-      <ChartFrame title="Price" badge="OHLC">
+      <ChartFrame title="Price" badge="OHLC" chartHeightPx={300}>
         <div className="h-full flex items-center justify-center text-xs font-mono text-terminal-muted">
           No price data
         </div>
@@ -43,7 +43,12 @@ export default function CandlestickChart({ bars = [], overlays = {} }) {
   });
 
   return (
-    <ChartFrame title="Price" subtitle="Candlestick + overlays" badge="OHLC" height="h-[340px]">
+    <ChartFrame
+      title="Price"
+      subtitle="Candlestick + overlays"
+      badge="OHLC"
+      chartHeightPx={300}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...getRechartsGridProps()} />

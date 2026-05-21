@@ -36,7 +36,7 @@ export default function Dashboard() {
       setError(null);
 
       try {
-        const [portfolioRes, rankingsRes] = await Promise.all([
+        const [portfolioOutcome, rankingsOutcome] = await Promise.allSettled([
           getPortfolio(),
           getRankings(),
         ]);
@@ -45,18 +45,40 @@ export default function Dashboard() {
           return;
         }
 
-        setPortfolio(parsePortfolioResponse(portfolioRes.data));
-        setRankings(parseRankingsResponse(rankingsRes.data));
-      } catch (err) {
-        console.error(err);
+        const messages = [];
 
+        if (portfolioOutcome.status === "fulfilled") {
+          setPortfolio(parsePortfolioResponse(portfolioOutcome.value.data));
+        } else {
+          setPortfolio(null);
+          messages.push(
+            getApiErrorMessage(
+              portfolioOutcome.reason,
+              "Portfolio data unavailable"
+            )
+          );
+        }
+
+        if (rankingsOutcome.status === "fulfilled") {
+          setRankings(parseRankingsResponse(rankingsOutcome.value.data));
+        } else {
+          setRankings([]);
+          messages.push(
+            getApiErrorMessage(rankingsOutcome.reason, "Rankings unavailable")
+          );
+        }
+
+        setError(messages.length ? messages.join(" · ") : null);
+      } catch (err) {
         if (!isMounted) {
           return;
         }
 
-        setError(
-          getApiErrorMessage(err, "Failed to load dashboard data")
-        );
+        if (import.meta.env.DEV) {
+          console.error(err);
+        }
+
+        setError(getApiErrorMessage(err, "Failed to load dashboard data"));
         setPortfolio(null);
         setRankings([]);
       } finally {
@@ -145,7 +167,7 @@ export default function Dashboard() {
             }
             subValue="Simulated 1M"
           />
-          <KpiCard label="Universe" value="NIFTY 250" tone="blue" subValue="Cross-section" />
+          <KpiCard label="Universe" value="Top‑K" tone="blue" subValue="Cached signals" />
           <KpiCard label="Model" value="LightGBM" tone="cyan" subValue="Ranker v1" />
           <KpiCard
             label="Ranked"

@@ -21,7 +21,7 @@ const data = [
 const maxVal = Math.max(...data.map((d) => d.value));
 
 export default function FeatureImportance({ embedded = false }) {
-  const height = embedded ? 220 : 320;
+  const h = embedded ? 220 : 320;
 
   return (
     <TerminalPanel
@@ -31,7 +31,8 @@ export default function FeatureImportance({ embedded = false }) {
       className={embedded ? "" : "min-h-[360px]"}
       bodyClassName="!pb-2"
     >
-      <ResponsiveContainer width="100%" height={height}>
+      <div className="w-full" style={{ height: h, minHeight: h }}>
+        <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
           layout="vertical"
@@ -99,6 +100,7 @@ export default function FeatureImportance({ embedded = false }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      </div>
     </TerminalPanel>
   );
 }

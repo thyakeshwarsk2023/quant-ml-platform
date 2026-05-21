@@ -32,7 +32,7 @@ export default function MacdChart({ bars = [] }) {
 
   if (!chartData.length) {
     return (
-      <ChartFrame title="MACD" badge="12/26/9">
+      <ChartFrame title="MACD" badge="12/26/9" chartHeightPx={140}>
         <div className="h-full flex items-center justify-center text-xs font-mono text-terminal-muted">
           MACD unavailable
         </div>
@@ -41,7 +41,7 @@ export default function MacdChart({ bars = [] }) {
   }
 
   return (
-    <ChartFrame title="MACD" subtitle="Line + histogram" badge="12/26/9" height="h-[160px]">
+    <ChartFrame title="MACD" subtitle="Line + histogram" badge="12/26/9" chartHeightPx={140}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...getRechartsGridProps()} />

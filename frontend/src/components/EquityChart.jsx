@@ -102,7 +102,14 @@ export default function EquityChart({ runId, embedded = false }) {
           }
         }
       } catch (err) {
-        console.error("Equity API error:", err);
+        if (import.meta.env.DEV) {
+          console.error("Equity API error:", err);
+        }
+
+        if (intervalRef.id) {
+          clearInterval(intervalRef.id);
+          intervalRef.id = null;
+        }
 
         if (!isMounted) {
           return;

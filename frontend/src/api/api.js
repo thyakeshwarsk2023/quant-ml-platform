@@ -1,12 +1,26 @@
 import axios from "axios";
-import { resolveApiBaseUrl } from "../config/api.js";
+import {
+  API_BASE_URL,
+  resolveApiBaseUrl,
+  isProductionApiConfigured,
+} from "../config/api.js";
 
 const API = axios.create({
-  baseURL: resolveApiBaseUrl(),
-  timeout: 120000,
+  baseURL: "",
+  timeout: 60000,
   headers: {
     "Content-Type": "application/json",
   },
+});
+
+API.interceptors.request.use((config) => {
+  if (import.meta.env.PROD && !API_BASE_URL) {
+    const err = new Error("VITE_API_BASE_URL_NOT_SET");
+    err.code = "NO_API_BASE";
+    return Promise.reject(err);
+  }
+  config.baseURL = resolveApiBaseUrl();
+  return config;
 });
 
 API.interceptors.response.use(
@@ -18,6 +32,8 @@ API.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export { isProductionApiConfigured };
 
 export const getHealth = () => API.get("/health");
 

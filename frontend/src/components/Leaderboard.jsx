@@ -1,15 +1,11 @@
 import { useEffect, useState } from "react";
 import { getLeaderboard } from "../api/api";
-import {
-  getApiErrorMessage,
-  parseLeaderboardResponse,
-} from "../utils/apiHelpers";
+import { parseLeaderboardResponse } from "../utils/apiHelpers";
 import { formatReturn } from "../utils/formatters";
 
 export default function Leaderboard({ embedded = false }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -23,17 +19,16 @@ export default function Leaderboard({ embedded = false }) {
         }
 
         setData(parseLeaderboardResponse(res.data));
-        setError(null);
       } catch (err) {
-        console.error("Leaderboard error:", err);
+        if (import.meta.env.DEV) {
+          console.warn("Leaderboard fetch:", err);
+        }
 
         if (!isMounted) {
           return;
         }
 
-        setError(
-          getApiErrorMessage(err, "Failed to load leaderboard")
-        );
+        setData([]);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -42,11 +37,9 @@ export default function Leaderboard({ embedded = false }) {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 5000);
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
     };
   }, []);
 
@@ -55,12 +48,6 @@ export default function Leaderboard({ embedded = false }) {
       <p className="text-terminal-muted text-xs font-mono py-2">
         Loading leaderboard…
       </p>
-    );
-  }
-
-  if (error) {
-    return (
-      <p className="text-terminal-negative text-xs font-mono py-2">{error}</p>
     );
   }
 

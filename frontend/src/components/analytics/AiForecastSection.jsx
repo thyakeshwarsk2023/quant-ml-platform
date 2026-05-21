@@ -44,7 +44,10 @@ export default function AiForecastSection({ forecast, symbol }) {
       >
         <div className="space-y-3">
           {points.length > 0 ? (
-            <div className="h-[160px] border border-terminal-border/60 bg-terminal-surface/40 rounded-sm p-2">
+            <div
+              className="border border-terminal-border/60 bg-terminal-surface/40 rounded-sm p-2 w-full"
+              style={{ height: 160, minHeight: 160 }}
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                   data={chartData}
