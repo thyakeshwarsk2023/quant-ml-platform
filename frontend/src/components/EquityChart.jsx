@@ -68,9 +68,14 @@ export default function EquityChart({ runId, embedded = false }) {
     stableCountRef.current = 0;
     lastLengthRef.current = 0;
 
-    setLoading(true);
-    setError(null);
-    setData([]);
+    queueMicrotask(() => {
+      if (!isMounted) {
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      setData([]);
+    });
 
     const fetchData = async () => {
       try {

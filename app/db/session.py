@@ -5,6 +5,7 @@ from collections.abc import Generator
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 load_dotenv(dotenv_path=".env")
 
@@ -45,14 +46,24 @@ def _init_engine() -> None:
     ):
         connect_args["sslmode"] = "require"
 
-    engine = create_engine(
-        normalized,
-        pool_pre_ping=True,
-        pool_recycle=300,
-        pool_size=5,
-        max_overflow=10,
-        connect_args=connect_args,
-    )
+    engine_options = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "connect_args": connect_args,
+    }
+
+    if os.getenv("VERCEL"):
+        engine_options["poolclass"] = NullPool
+    else:
+        engine_options.update(
+            {
+                "pool_size": int(os.getenv("DB_POOL_SIZE", "2")),
+                "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "2")),
+                "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "10")),
+            }
+        )
+
+    engine = create_engine(normalized, **engine_options)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     logger.info("Database engine initialized")
 

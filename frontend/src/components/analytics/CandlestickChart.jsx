@@ -6,11 +6,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Cell,
 } from "recharts";
 
 import ChartFrame from "./ChartFrame";
+import SafeResponsiveContainer from "../ui/SafeResponsiveContainer";
 import {
   ANALYTICS_SERIES,
   getRechartsAxisProps,
@@ -49,7 +49,7 @@ export default function CandlestickChart({ bars = [], overlays = {} }) {
       badge="OHLC"
       chartHeightPx={300}
     >
-      <ResponsiveContainer width="100%" height="100%">
+      <SafeResponsiveContainer minHeight={260}>
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...getRechartsGridProps()} />
           <XAxis dataKey="label" {...getRechartsAxisProps()} minTickGap={40} />
@@ -77,7 +77,7 @@ export default function CandlestickChart({ bars = [], overlays = {} }) {
               }
               return [Number(_).toFixed(2), name];
             }}
-            content={({ active, payload, label }) => {
+            content={({ active, payload }) => {
               if (!active || !payload?.length) {
                 return null;
               }
@@ -197,7 +197,7 @@ export default function CandlestickChart({ bars = [], overlays = {} }) {
             </>
           )}
         </ComposedChart>
-      </ResponsiveContainer>
+      </SafeResponsiveContainer>
     </ChartFrame>
   );
 }

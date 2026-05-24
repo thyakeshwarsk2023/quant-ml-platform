@@ -5,11 +5,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
 
 import ChartFrame from "./ChartFrame";
+import SafeResponsiveContainer from "../ui/SafeResponsiveContainer";
 import {
   getRechartsAxisProps,
   getRechartsGridProps,
@@ -35,7 +35,7 @@ export default function RsiChart({ bars = [] }) {
 
   return (
     <ChartFrame title="RSI" subtitle="Relative Strength Index" badge="14" chartHeightPx={140}>
-      <ResponsiveContainer width="100%" height="100%">
+      <SafeResponsiveContainer minHeight={120}>
         <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...getRechartsGridProps()} />
           <XAxis dataKey="label" {...getRechartsAxisProps()} minTickGap={50} />
@@ -54,7 +54,7 @@ export default function RsiChart({ bars = [] }) {
             strokeWidth={1.5}
           />
         </LineChart>
-      </ResponsiveContainer>
+      </SafeResponsiveContainer>
     </ChartFrame>
   );
 }

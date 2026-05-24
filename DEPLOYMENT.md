@@ -54,6 +54,10 @@ The API normalizes `postgres://` → `postgresql+psycopg2://` and uses connectio
 | `ENVIRONMENT` | `production` |
 | `LOG_LEVEL` | `INFO` |
 | `CORS_ORIGINS` | `https://your-app.vercel.app,http://localhost:5173` |
+| `CORS_ORIGIN_REGEX` | `https://.*\.vercel\.app` for preview URLs, optional |
+| `DB_POOL_SIZE` | `2` |
+| `DB_MAX_OVERFLOW` | `2` |
+| `DB_POOL_TIMEOUT` | `10` |
 
 Use your real Vercel URL(s), comma-separated, **no trailing slashes**.
 
@@ -90,7 +94,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Set for **Production** (and Preview if desired).
 
-`frontend/vercel.json` rewrites all routes to `index.html` for React Router.
+`frontend/vercel.json` rewrites React Router paths to `index.html`, while leaving `/api/*` untouched. Use `VITE_API_BASE_URL=/api` only if you actually deploy an API under the same Vercel project; otherwise set the full backend origin, such as Render.
 
 ### Local production build test
 
@@ -127,6 +131,8 @@ Open `http://localhost:4173` and confirm API calls hit your backend.
 | CORS errors | Set `CORS_ORIGINS` on Render to exact Vercel origin (https, no path) |
 | Cold start + `/portfolio` slow | First request ranks many symbols; consider smaller `top_k` or paid Render plan |
 | `VITE_API_BASE_URL` unset on Vercel | Production build logs error; API calls fail until env is set |
+| `/api/*` returns `index.html` | Ensure the Vercel rewrite excludes `/api/` and `VITE_API_BASE_URL` points to a real backend |
+| Vercel Python serverless timeout | Do not run training/backtests in request scope; keep API endpoints cache-backed or host the backend on Render/Fly/Railway |
 | Torch install size on Render | May lengthen builds; required for LSTM path |
 | yfinance rate limits | External market data; retries may be needed under load |
 

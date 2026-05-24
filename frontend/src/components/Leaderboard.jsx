@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { getLeaderboard } from "../api/api";
-import { parseLeaderboardResponse } from "../utils/apiHelpers";
+import { getApiErrorMessage, parseLeaderboardResponse } from "../utils/apiHelpers";
 import { formatReturn } from "../utils/formatters";
 
 export default function Leaderboard({ embedded = false }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -19,16 +20,14 @@ export default function Leaderboard({ embedded = false }) {
         }
 
         setData(parseLeaderboardResponse(res.data));
+        setError(null);
       } catch (err) {
-        if (import.meta.env.DEV) {
-          console.warn("Leaderboard fetch:", err);
-        }
-
         if (!isMounted) {
           return;
         }
 
         setData([]);
+        setError(getApiErrorMessage(err, "Leaderboard unavailable"));
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -45,8 +44,21 @@ export default function Leaderboard({ embedded = false }) {
 
   if (loading) {
     return (
-      <p className="text-terminal-muted text-xs font-mono py-2">
-        Loading leaderboard…
+      <div className="space-y-2 py-1">
+        {[0, 1, 2, 3].map((row) => (
+          <div
+            key={row}
+            className="h-7 rounded-sm border border-terminal-border/50 bg-terminal-surface/60 animate-pulse"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <p className="text-terminal-negative text-xs font-mono py-2">
+        {error}
       </p>
     );
   }
@@ -81,16 +93,16 @@ export default function Leaderboard({ embedded = false }) {
             return (
               <tr key={row.symbol || `leader-${index}`}>
                 <td className="text-terminal-cyan font-semibold">
-                  {row.symbol || "—"}
+                  {row.symbol || "-"}
                 </td>
                 <td className="text-right text-terminal-slate">
-                  {row.sharpe ? row.sharpe.toFixed(2) : "—"}
+                  {row.sharpe ? row.sharpe.toFixed(2) : "-"}
                 </td>
                 <td className={`text-right ${ret.className}`}>
                   {ret.text}
                 </td>
                 <td className="text-right text-terminal-cyan">
-                  {row.ml_score ? row.ml_score.toFixed(2) : "—"}
+                  {row.ml_score ? row.ml_score.toFixed(2) : "-"}
                 </td>
               </tr>
             );

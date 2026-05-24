@@ -1,6 +1,7 @@
 /**
  * API base URL for all backend requests.
  * Set VITE_API_BASE_URL in Vercel (production) or .env.local (local dev).
+ * For a same-origin Vercel API deployment, set VITE_API_BASE_URL=/api.
  */
 const raw = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
 

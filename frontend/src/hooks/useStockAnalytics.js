@@ -46,11 +46,13 @@ export default function useStockAnalytics(initialSymbol = "AAPL") {
 
   useEffect(() => {
     if (import.meta.env.PROD && !isProductionApiConfigured()) {
-      setError("Set VITE_API_BASE_URL to load live analytics.");
-      setLoading(false);
+      queueMicrotask(() => {
+        setError("Set VITE_API_BASE_URL to load live analytics.");
+        setLoading(false);
+      });
       return;
     }
-    fetchAnalytics(initialSymbol, "1y");
+    queueMicrotask(() => fetchAnalytics(initialSymbol, "1y"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

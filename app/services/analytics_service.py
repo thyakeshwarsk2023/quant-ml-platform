@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -22,6 +23,8 @@ def _load_ohlc(symbol: str, period: str = "1y") -> pd.DataFrame:
         interval="1d",
         progress=False,
         auto_adjust=True,
+        timeout=12,
+        threads=False,
     )
 
     if isinstance(data.columns, pd.MultiIndex):
@@ -246,6 +249,7 @@ def _safe(value) -> float | None:
     return round(float(value), 4)
 
 
+@lru_cache(maxsize=128)
 def get_stock_analytics(symbol: str, period: str = "1y") -> dict:
     symbol = symbol.strip().upper()
     df = _load_ohlc(symbol, period=period)

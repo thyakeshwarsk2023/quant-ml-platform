@@ -2,6 +2,8 @@ import logging
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
+from time import perf_counter
+from uuid import uuid4
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,18 +71,43 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = [
-    "http://localhost:5173",
-    "https://quant-ml-platform-jfs39x556-thyakesh-s-projects.vercel.app",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.cors_origins_list,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_diagnostics(request: Request, call_next):
+    request_id = request.headers.get("x-request-id", str(uuid4()))
+    started = perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "Request failed request_id=%s method=%s path=%s",
+            request_id,
+            request.method,
+            request.url.path,
+        )
+        raise
+
+    duration_ms = int((perf_counter() - started) * 1000)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Response-Time-ms"] = str(duration_ms)
+    if duration_ms > 10000:
+        logger.warning(
+            "Slow request request_id=%s method=%s path=%s duration_ms=%s",
+            request_id,
+            request.method,
+            request.url.path,
+            duration_ms,
+        )
+    return response
 
 
 @app.exception_handler(Exception)
