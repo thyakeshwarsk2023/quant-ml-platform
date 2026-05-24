@@ -6,10 +6,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
 } from "recharts";
 
 import TerminalPanel from "../ui/TerminalPanel";
+import SafeResponsiveContainer from "../ui/SafeResponsiveContainer";
 import ForecastCard from "./ForecastCard";
 import {
   getRechartsAxisProps,
@@ -48,7 +48,7 @@ export default function AiForecastSection({ forecast, symbol }) {
               className="border border-terminal-border/60 bg-terminal-surface/40 rounded-sm p-2 w-full"
               style={{ height: 160, minHeight: 160 }}
             >
-              <ResponsiveContainer width="100%" height="100%">
+              <SafeResponsiveContainer minHeight={140}>
                 <ComposedChart
                   data={chartData}
                   margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
@@ -82,7 +82,7 @@ export default function AiForecastSection({ forecast, symbol }) {
                     dot={{ r: 2, fill: TERMINAL_CHART_COLORS.cyan }}
                   />
                 </ComposedChart>
-              </ResponsiveContainer>
+              </SafeResponsiveContainer>
             </div>
           ) : (
             <p className="text-[10px] font-mono text-terminal-muted">

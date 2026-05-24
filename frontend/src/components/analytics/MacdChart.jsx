@@ -6,11 +6,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Cell,
 } from "recharts";
 
 import ChartFrame from "./ChartFrame";
+import SafeResponsiveContainer from "../ui/SafeResponsiveContainer";
 import {
   getRechartsAxisProps,
   getRechartsGridProps,
@@ -42,7 +42,7 @@ export default function MacdChart({ bars = [] }) {
 
   return (
     <ChartFrame title="MACD" subtitle="Line + histogram" badge="12/26/9" chartHeightPx={140}>
-      <ResponsiveContainer width="100%" height="100%">
+      <SafeResponsiveContainer minHeight={120}>
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid {...getRechartsGridProps()} />
           <XAxis dataKey="label" {...getRechartsAxisProps()} minTickGap={50} />
@@ -77,7 +77,7 @@ export default function MacdChart({ bars = [] }) {
             strokeWidth={1.5}
           />
         </ComposedChart>
-      </ResponsiveContainer>
+      </SafeResponsiveContainer>
     </ChartFrame>
   );
 }
