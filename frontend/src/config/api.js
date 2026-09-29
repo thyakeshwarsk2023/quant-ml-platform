@@ -9,12 +9,22 @@ export const API_BASE_URL = raw.replace(/\/$/, "");
 
 let loggedMissingProdApi = false;
 
-/** True when production build has a non-empty API base (avoids 404s to Vercel host). */
+/** True when production build has a non-empty API base or is self-hosted on same origin. */
 export function isProductionApiConfigured() {
   if (import.meta.env.DEV) {
     return true;
   }
-  return Boolean(API_BASE_URL);
+  if (API_BASE_URL) {
+    return true;
+  }
+  // In a full-stack unified deployment (FastAPI serving dist), relative requests work directly.
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (!host.includes("vercel.app") && !host.includes("netlify.app")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function resolveApiBaseUrl() {

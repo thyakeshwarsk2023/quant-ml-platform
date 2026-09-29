@@ -1,5 +1,8 @@
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from app.services.backtest_service import run_multi_strategy
 
@@ -48,16 +51,16 @@ def process_symbol(symbol: str):
         # =========================
         # 🔥 ML SCORE (PRIMARY)
         # =========================
-        ml_score = safe(predict_score(result))
+        ml_score = safe(result.get("ml_score")) if result.get("ml_score") is not None else safe(predict_score(result))
 
         # =========================
         # 🔥 LSTM SIGNAL (OPTIONAL)
         # =========================
         lstm_signal = 0.0
-        if predict_lstm and prices and len(prices) > 20:
+        if predict_lstm and prices and len(prices) >= 15:
             try:
                 lstm_signal = safe(predict_lstm(prices))
-            except:
+            except Exception:
                 lstm_signal = 0.0
 
         # =========================
@@ -90,7 +93,7 @@ def process_symbol(symbol: str):
         }
 
     except Exception as e:
-        print(f"❌ Failed {symbol}: {e}")
+        logger.warning(f"Failed {symbol}: {e}")
         return None
 
 

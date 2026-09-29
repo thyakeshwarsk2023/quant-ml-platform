@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
-from datetime import datetime
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey
 from app.db.base import Base
 
 
@@ -7,23 +6,13 @@ class BacktestRun(Base):
     __tablename__ = "backtest_runs"
 
     id = Column(Integer, primary_key=True, index=True)
-
-    # =========================
-    # BASIC INFO
-    # =========================
+    strategy_id = Column(Integer, nullable=True)
     symbol = Column(String, index=True)
     initial_capital = Column(Float, default=100000)
-
-    # =========================
-    # STATUS TRACKING
-    # =========================
+    final_capital = Column(Float, nullable=True)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
     status = Column(String, default="pending")  # pending / running / completed / failed
-
-    # =========================
-    # TIMESTAMPS
-    # =========================
-    created_at = Column(DateTime, default=datetime.utcnow)
-    completed_at = Column(DateTime, nullable=True)
 
 
 class Metrics(Base):
@@ -49,5 +38,5 @@ class EquityCurve(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     run_id = Column(Integer, ForeignKey("backtest_runs.id"), index=True)
-    timestamp = Column(String)
+    timestamp = Column(Date)
     equity = Column(Float)

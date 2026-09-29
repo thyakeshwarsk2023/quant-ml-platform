@@ -1,6 +1,6 @@
 import { Line } from "react-chartjs-2";
 import { useEffect, useRef, useState } from "react";
-import { getEquity } from "../api/api";
+import { getEquity, getRunStatus } from "../api/api";
 import {
   formatChartLabel,
   getApiErrorMessage,
@@ -34,7 +34,7 @@ ChartJS.register(
   Legend
 );
 
-const MAX_POLLS = 20;
+const MAX_POLLS = 25;
 
 function ChartState({ children, embedded }) {
   const height = embedded ? "h-[260px]" : "h-[420px]";
@@ -50,6 +50,7 @@ function ChartState({ children, embedded }) {
 export default function EquityChart({ runId, embedded = false }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [runStatus, setRunStatus] = useState(null);
   const [error, setError] = useState(null);
   const pollCountRef = useRef(0);
   const stableCountRef = useRef(0);
@@ -74,28 +75,48 @@ export default function EquityChart({ runId, embedded = false }) {
       }
       setLoading(true);
       setError(null);
+      setRunStatus("running");
       setData([]);
     });
 
     const fetchData = async () => {
       try {
-        const res = await getEquity(runId);
+        const [equityRes, statusRes] = await Promise.allSettled([
+          getEquity(runId),
+          getRunStatus(runId),
+        ]);
 
         if (!isMounted) {
           return;
         }
 
-        const points = parseEquityResponse(res.data);
-        setData(points);
-        setError(null);
-
-        if (points.length === lastLengthRef.current && points.length > 0) {
-          stableCountRef.current += 1;
-        } else {
-          stableCountRef.current = 0;
+        if (statusRes.status === "fulfilled" && statusRes.value?.data) {
+          const status = statusRes.value.data.status;
+          setRunStatus(status);
+          if (status === "failed") {
+            setError("Backtest run failed during simulation.");
+            if (intervalRef.id) {
+              clearInterval(intervalRef.id);
+              intervalRef.id = null;
+            }
+            return;
+          }
         }
 
-        lastLengthRef.current = points.length;
+        if (equityRes.status === "fulfilled" && equityRes.value?.data) {
+          const points = parseEquityResponse(equityRes.value.data);
+          setData(points);
+          setError(null);
+
+          if (points.length === lastLengthRef.current && points.length > 0) {
+            stableCountRef.current += 1;
+          } else {
+            stableCountRef.current = 0;
+          }
+
+          lastLengthRef.current = points.length;
+        }
+
         pollCountRef.current += 1;
 
         if (
@@ -104,6 +125,7 @@ export default function EquityChart({ runId, embedded = false }) {
         ) {
           if (intervalRef.id) {
             clearInterval(intervalRef.id);
+            intervalRef.id = null;
           }
         }
       } catch (err) {
@@ -111,18 +133,11 @@ export default function EquityChart({ runId, embedded = false }) {
           console.error("Equity API error:", err);
         }
 
-        if (intervalRef.id) {
-          clearInterval(intervalRef.id);
-          intervalRef.id = null;
-        }
-
         if (!isMounted) {
           return;
         }
 
-        setError(
-          getApiErrorMessage(err, "Failed to load equity curve")
-        );
+        setError(getApiErrorMessage(err, "Failed to load equity curve"));
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -131,7 +146,7 @@ export default function EquityChart({ runId, embedded = false }) {
     };
 
     fetchData();
-    intervalRef.id = setInterval(fetchData, 4000);
+    intervalRef.id = setInterval(fetchData, 3500);
 
     return () => {
       isMounted = false;
@@ -153,7 +168,7 @@ export default function EquityChart({ runId, embedded = false }) {
     return (
       <ChartState embedded={embedded}>
         <span className="text-terminal-cyan animate-pulse">
-          Loading curve…
+          Initializing simulation run #{runId}…
         </span>
       </ChartState>
     );
@@ -170,7 +185,11 @@ export default function EquityChart({ runId, embedded = false }) {
   if (!data.length) {
     return (
       <ChartState embedded={embedded}>
-        Waiting for equity ticks…
+        <span className="text-terminal-cyan animate-pulse">
+          {runStatus === "running"
+            ? `Simulating backtest #${runId}…`
+            : "Waiting for equity ticks…"}
+        </span>
       </ChartState>
     );
   }
@@ -180,6 +199,7 @@ export default function EquityChart({ runId, embedded = false }) {
   const pnlPct = startEquity
     ? ((endEquity - startEquity) / startEquity) * 100
     : 0;
+  const isPositive = pnlPct >= 0;
   const pnlFmt = formatReturn(pnlPct);
 
   const chartData = {
@@ -188,12 +208,12 @@ export default function EquityChart({ runId, embedded = false }) {
       {
         label: "Equity",
         data: data.map((point) => point.equity),
-        borderColor: TERMINAL_CHART_COLORS.positive,
+        borderColor: isPositive ? TERMINAL_CHART_COLORS.positive : TERMINAL_CHART_COLORS.negative,
         backgroundColor: (context) => {
           const chart = context.chart;
-          return buildEquityGradient(chart);
+          return buildEquityGradient(chart, isPositive);
         },
-        tension: 0.4,
+        tension: 0.3,
         fill: true,
         pointRadius: 0,
         pointHoverRadius: 3,
@@ -210,11 +230,11 @@ export default function EquityChart({ runId, embedded = false }) {
       {!embedded && (
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-sm font-semibold text-terminal-positive tracking-tight">
+            <h2 className={`text-sm font-semibold tracking-tight ${isPositive ? "text-terminal-positive" : "text-terminal-negative"}`}>
               Equity Curve
             </h2>
             <p className="text-[11px] text-terminal-muted mt-0.5">
-              Portfolio mark-to-market
+              Portfolio mark-to-market (Run #{runId})
             </p>
           </div>
           <div className="text-right">
@@ -229,7 +249,8 @@ export default function EquityChart({ runId, embedded = false }) {
       )}
 
       {embedded && (
-        <div className="flex justify-end mb-2 pr-1">
+        <div className="flex justify-between items-center mb-2 px-1">
+          <span className="text-[11px] font-mono text-terminal-muted">Run #{runId}</span>
           <span className={`font-mono text-sm font-semibold ${pnlFmt.className}`}>
             {pnlFmt.text}
           </span>
@@ -246,7 +267,7 @@ export default function EquityChart({ runId, embedded = false }) {
         <Line
           ref={chartRef}
           data={chartData}
-          options={getEquityChartOptions()}
+          options={getEquityChartOptions(isPositive)}
         />
       </div>
     </div>

@@ -1,19 +1,22 @@
+import logging
 import os
 import pandas as pd
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 CACHE_DIR = "data_cache"
 
 
 # =========================
-# 📁 PATH
+# PATH
 # =========================
 def get_cache_path(symbol):
     return os.path.join(CACHE_DIR, f"{symbol}.csv")
 
 
 # =========================
-# ⏱️ CACHE VALIDITY
+# CACHE VALIDITY
 # =========================
 def is_cache_valid(path, expiry_days):
     if not os.path.exists(path):
@@ -24,74 +27,73 @@ def is_cache_valid(path, expiry_days):
 
 
 # =========================
-# 📦 LOAD CACHE (FIXED)
+# LOAD CACHE
 # =========================
 def load_from_cache(symbol, expiry_days=1):
     path = get_cache_path(symbol)
 
     if os.path.exists(path) and is_cache_valid(path, expiry_days):
-        print(f"📦 Using fresh cache for {symbol}")
+        logger.info(f"Using fresh cache for {symbol}")
 
         try:
             df = pd.read_csv(path, index_col=0, parse_dates=True)
 
             # =========================
-            # 🔥 CRITICAL FIX: FORCE NUMERIC
+            # FORCE NUMERIC
             # =========================
             for col in ["Open", "High", "Low", "Close", "Volume"]:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors="coerce")
 
             # =========================
-            # 🔥 CLEAN BAD DATA
+            # CLEAN BAD DATA
             # =========================
             df = df.replace([float("inf"), -float("inf")], pd.NA)
             df = df.dropna()
 
-            # 🔥 MINIMUM LENGTH CHECK (important)
+            # MINIMUM LENGTH CHECK
             if len(df) < 50:
-                print(f"⚠️ Cache too small for {symbol}, ignoring")
+                logger.warning(f"Cache too small for {symbol}, ignoring")
                 return None
 
             return df
 
         except Exception as e:
-            print(f"⚠️ Corrupted cache for {symbol}: {e}")
+            logger.warning(f"Corrupted cache for {symbol}: {e}")
             return None
 
     return None
 
 
 # =========================
-# 💾 SAVE CACHE
+# SAVE CACHE
 # =========================
 def save_to_cache(symbol, data):
     os.makedirs(CACHE_DIR, exist_ok=True)
 
     path = get_cache_path(symbol)
 
-    # 🔥 ensure index is datetime
+    # Ensure index is datetime
     if not isinstance(data.index, pd.DatetimeIndex):
         data.index = pd.to_datetime(data.index, errors="coerce")
 
     data.to_csv(path)
-
-    print(f"💾 Saved {symbol} to cache")
+    logger.info(f"Saved {symbol} to cache")
 
 
 # =========================
-# 🗑️ CLEAR CACHE
+# CLEAR CACHE
 # =========================
 def clear_cache(symbol):
     path = get_cache_path(symbol)
 
     if os.path.exists(path):
         os.remove(path)
-        print(f"🗑️ Cache cleared for {symbol}")
+        logger.info(f"Cache cleared for {symbol}")
 
 
 # =========================
-# 💣 CLEAR ALL CACHE (NEW)
+# CLEAR ALL CACHE
 # =========================
 def clear_all_cache():
     if not os.path.exists(CACHE_DIR):
@@ -104,4 +106,4 @@ def clear_all_cache():
         except Exception:
             pass
 
-    print("🧹 Cleared entire cache")
+    logger.info("Cleared entire cache")

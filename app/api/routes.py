@@ -5,7 +5,8 @@ from fastapi import (
 )
 
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, insert
+from app.models.backtest import EquityCurve
 
 import json
 import traceback
@@ -78,38 +79,91 @@ scan_jobs = {}
 
 
 # =========================
-# 🚀 SCAN ENDPOINTS (STUB)
+# 🚀 SCAN ENDPOINTS
 # =========================
 @router.post("/scan/start")
 def start_scan():
+    import uuid
+    from app.services.scan_service import process_symbol
+    from app.core.data.nifty50 import NIFTY_50
+
+    job_id = str(uuid.uuid4())
+    scan_jobs[job_id] = {
+        "status": "running",
+        "progress": 0,
+        "results": [],
+        "error": None
+    }
+
+    def _worker():
+        try:
+            # Scan top symbols from NIFTY_50 plus benchmark AAPL
+            symbols = list(NIFTY_50[:10])
+            if "AAPL" not in symbols:
+                symbols.insert(0, "AAPL")
+
+            total = len(symbols)
+            results = []
+            for idx, sym in enumerate(symbols):
+                try:
+                    res = process_symbol(sym)
+                    if res:
+                        results.append(res)
+                except Exception as sym_err:
+                    logger.warning("Scan failed for symbol %s: %s", sym, sym_err)
+
+                scan_jobs[job_id]["progress"] = int(((idx + 1) / total) * 100)
+
+            results.sort(key=lambda x: x.get("score", 0), reverse=True)
+            scan_jobs[job_id]["results"] = results
+            scan_jobs[job_id]["status"] = "completed"
+            scan_jobs[job_id]["progress"] = 100
+            logger.info("Scan job %s completed with %d results", job_id, len(results))
+
+        except Exception as exc:
+            logger.exception("Scan job %s failed: %s", job_id, exc)
+            scan_jobs[job_id]["status"] = "failed"
+            scan_jobs[job_id]["error"] = str(exc)
+
+    threading.Thread(target=_worker, daemon=True).start()
     return {
-        "status": "error",
-        "error": "Scanner feature not implemented yet"
+        "status": "started",
+        "job_id": job_id
     }
 
 
 @router.get("/scan/status/{job_id}")
 def get_scan_status(job_id: str):
+    job = scan_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Scan job not found")
     return {
-        "status": "error",
-        "error": "Scanner feature not implemented yet"
+        "job_id": job_id,
+        "status": job["status"],
+        "progress": job.get("progress", 0),
+        "error": job.get("error")
     }
 
 
 @router.get("/scan/results/{job_id}")
 def get_scan_results(job_id: str):
-    return {
-        "status": "error",
-        "error": "Scanner feature not implemented yet"
-    }
+    job = scan_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Scan job not found")
+    return job.get("results", [])
 
 
 @router.get("/model/evaluate")
 def model_evaluate():
-    return {
-        "status": "error",
-        "error": "Model evaluation endpoint not implemented yet"
-    }
+    try:
+        from app.ml.evaluate import evaluate_model
+        return evaluate_model()
+    except Exception as exc:
+        logger.exception("Model evaluate error: %s", exc)
+        return {
+            "status": "error",
+            "error": str(exc)
+        }
 
 
 # =========================
@@ -306,20 +360,11 @@ def start_backtest(
             })
 
             equity_rows = [
-
                 {
-
-                    "id": run_id,
-
-                    "ts":
-                        p["timestamp"],
-
-                    "eq":
-                        float(
-                            p["equity"]
-                        )
+                    "run_id": run_id,
+                    "timestamp": str(p["timestamp"])[:10],
+                    "equity": float(p["equity"]),
                 }
-
                 for p in bt_result.get(
                     "equity_curve",
                     []
@@ -327,63 +372,55 @@ def start_backtest(
             ]
 
             if equity_rows:
+                local_db.execute(insert(EquityCurve), equity_rows)
 
-                local_db.execute(text("""
-                    INSERT INTO equity_curve (
-
-                        run_id,
-                        timestamp,
-                        equity
-
-                    )
-                    VALUES (
-
-                        :id,
-                        :ts,
-                        :eq
-                    )
-                """), equity_rows)
+            final_cap = (
+                float(equity_rows[-1]["equity"])
+                if equity_rows
+                else None
+            )
 
             # =========================
             # 🚀 COMPLETE
             # =========================
             local_db.execute(text("""
                 UPDATE backtest_runs
-                SET status='completed'
+                SET status='completed',
+                    final_capital=:final_cap
                 WHERE id=:id
             """), {
-
-                "id": run_id
+                "id": run_id,
+                "final_cap": final_cap,
             })
 
             local_db.commit()
 
             logger.info(
-                f"✅ Completed "
-                f"{symbol}"
+                f"✅ Completed {symbol} (run {run_id})"
             )
 
         except Exception as e:
 
             logger.error(
-                f"❌ Failed "
-                f"{symbol}: {e}"
+                f"❌ Failed {symbol} (run {run_id}): {e}"
             )
 
             traceback.print_exc()
 
             local_db.rollback()
 
-            local_db.execute(text("""
-                UPDATE backtest_runs
-                SET status='failed'
-                WHERE id=:id
-            """), {
+            try:
+                local_db.execute(text("""
+                    UPDATE backtest_runs
+                    SET status='failed'
+                    WHERE id=:id
+                """), {
+                    "id": run_id
+                })
 
-                "id": run_id
-            })
-
-            local_db.commit()
+                local_db.commit()
+            except Exception as update_err:
+                logger.error(f"Failed to update run status to failed: {update_err}")
 
         finally:
 
@@ -419,7 +456,7 @@ def equity(
             SELECT timestamp, equity
             FROM equity_curve
             WHERE run_id = :id
-            ORDER BY timestamp
+            ORDER BY id ASC
         """), {
 
             "id": run_id
@@ -436,6 +473,57 @@ def equity(
         )
 
         return []
+
+
+# =========================
+# 🚀 RUN STATUS
+# =========================
+@router.get("/run-status/{run_id}")
+def run_status(
+    run_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        run = db.execute(text("""
+            SELECT id, symbol, status, initial_capital, final_capital
+            FROM backtest_runs
+            WHERE id = :id
+        """), {"id": run_id}).fetchone()
+
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found")
+
+        metrics_row = db.execute(text("""
+            SELECT return_pct, sharpe, max_drawdown, volatility, win_rate, profit_factor, ml_score
+            FROM metrics
+            WHERE run_id = :id
+        """), {"id": run_id}).fetchone()
+
+        metrics_data = None
+        if metrics_row:
+            metrics_data = {
+                "return_pct": safe_float(metrics_row[0]),
+                "sharpe": safe_float(metrics_row[1]),
+                "max_drawdown": safe_float(metrics_row[2]),
+                "volatility": safe_float(metrics_row[3]),
+                "win_rate": safe_float(metrics_row[4]),
+                "profit_factor": safe_float(metrics_row[5]),
+                "ml_score": safe_float(metrics_row[6]),
+            }
+
+        return {
+            "id": run[0],
+            "symbol": run[1],
+            "status": run[2],
+            "initial_capital": safe_float(run[3], 100000.0),
+            "final_capital": safe_float(run[4]) if run[4] is not None else None,
+            "metrics": metrics_data,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ RUN STATUS ERROR: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch run status") from e
 
 
 # =========================

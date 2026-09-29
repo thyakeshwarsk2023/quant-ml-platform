@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 
 import Sidebar from "../components/Sidebar";
 import RankingsTable from "../components/RankingsTable";
-import { getRankings } from "../api/api";
+import { getPortfolio, getRankings } from "../api/api";
 import {
   getApiErrorMessage,
+  parsePortfolioResponse,
   parseRankingsResponse,
 } from "../utils/apiHelpers";
+import { enrichRankingsWithReturns } from "../utils/formatters";
 
 export default function RankingsPage() {
   const [rankings, setRankings] = useState([]);
@@ -18,16 +20,34 @@ export default function RankingsPage() {
 
     async function loadRankings() {
       try {
-        const res = await getRankings(50);
+        const [rankOutcome, portOutcome] = await Promise.allSettled([
+          getRankings(50),
+          getPortfolio(50),
+        ]);
 
         if (!isMounted) {
           return;
         }
 
-        setRankings(parseRankingsResponse(res.data));
-        setError(null);
+        let parsedRanks = [];
+        let parsedPort = null;
+
+        if (rankOutcome.status === "fulfilled") {
+          parsedRanks = parseRankingsResponse(rankOutcome.value.data);
+        } else {
+          setError(getApiErrorMessage(rankOutcome.reason, "Failed to load rankings"));
+        }
+
+        if (portOutcome.status === "fulfilled") {
+          parsedPort = parsePortfolioResponse(portOutcome.value.data);
+        }
+
+        const enriched = enrichRankingsWithReturns(parsedRanks, parsedPort);
+        setRankings(enriched);
       } catch (err) {
-        console.error(err);
+        if (import.meta.env.DEV) {
+          console.error(err);
+        }
 
         if (!isMounted) {
           return;

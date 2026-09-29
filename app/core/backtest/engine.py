@@ -31,8 +31,9 @@ class BacktestEngine:
 
             prev_equity = current_equity
 
+            ts = str(self.data.index[i])[:19]
             equity_curve.append({
-                "timestamp": str(self.data.index[i]),
+                "timestamp": ts,
                 "equity": current_equity
             })
 

@@ -7,7 +7,8 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from app.api.routes import router
@@ -16,6 +17,9 @@ from app.core.logging_config import setup_logging
 from app.db.session import check_database_connection, get_db
 
 logger = logging.getLogger(__name__)
+
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+SPA_ROUTES = {"rankings", "portfolio", "backtests", "scanner", "analytics"}
 
 CACHE_FILES = (
     Path("data_cache/rankings.json"),
@@ -110,6 +114,17 @@ async def request_diagnostics(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def spa_fallback_middleware(request: Request, call_next):
+    path = request.url.path.strip("/")
+    accept = request.headers.get("accept", "")
+    if request.method == "GET" and "text/html" in accept:
+        route_root = path.split("/")[0] if path else ""
+        if route_root in SPA_ROUTES and (FRONTEND_DIST / "index.html").is_file():
+            return FileResponse(FRONTEND_DIST / "index.html")
+    return await call_next(request)
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
@@ -128,7 +143,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 @app.get("/")
-def home():
+def home(request: Request):
+    index_file = FRONTEND_DIST / "index.html"
+    accept = request.headers.get("accept", "")
+    if index_file.is_file() and "text/html" in accept:
+        return FileResponse(index_file)
     return {
         "message": "Quant ML API Running",
         "status": "healthy",
@@ -178,3 +197,27 @@ def test_db(db: Session = Depends(get_db)):
 
 
 app.include_router(router)
+
+# Mount frontend assets for production / unified full-stack serving
+if (FRONTEND_DIST / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
+
+@app.get("/{full_path:path}")
+def catch_all_spa(full_path: str, request: Request):
+    index_file = FRONTEND_DIST / "index.html"
+    static_file = FRONTEND_DIST / full_path
+
+    # Serve static files directly from dist (favicon.svg, icons.svg, etc.)
+    if full_path and static_file.is_file():
+        return FileResponse(static_file)
+
+    accept = request.headers.get("accept", "")
+    route_root = full_path.split("/")[0] if full_path else ""
+    if index_file.is_file() and ("text/html" in accept or route_root in SPA_ROUTES):
+        return FileResponse(index_file)
+
+    return JSONResponse(
+        status_code=404,
+        content={"status": "error", "detail": f"Path /{full_path} not found"}
+    )

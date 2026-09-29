@@ -11,10 +11,10 @@ export const TERMINAL_CHART_COLORS = {
   tooltipBorder: "#1a2332",
 };
 
-export function buildEquityGradient(chart) {
+export function buildEquityGradient(chart, isPositive = true) {
   const { ctx, chartArea } = chart;
   if (!chartArea) {
-    return "rgba(34, 197, 94, 0.15)";
+    return isPositive ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)";
   }
 
   const gradient = ctx.createLinearGradient(
@@ -23,13 +23,19 @@ export function buildEquityGradient(chart) {
     0,
     chartArea.bottom
   );
-  gradient.addColorStop(0, "rgba(34, 197, 94, 0.28)");
-  gradient.addColorStop(0.55, "rgba(34, 211, 238, 0.08)");
-  gradient.addColorStop(1, "rgba(34, 197, 94, 0)");
+  if (isPositive) {
+    gradient.addColorStop(0, "rgba(34, 197, 94, 0.28)");
+    gradient.addColorStop(0.55, "rgba(34, 211, 238, 0.08)");
+    gradient.addColorStop(1, "rgba(34, 197, 94, 0)");
+  } else {
+    gradient.addColorStop(0, "rgba(239, 68, 68, 0.28)");
+    gradient.addColorStop(0.55, "rgba(244, 63, 94, 0.08)");
+    gradient.addColorStop(1, "rgba(239, 68, 68, 0)");
+  }
   return gradient;
 }
 
-export function getEquityChartOptions() {
+export function getEquityChartOptions(isPositive = true) {
   const c = TERMINAL_CHART_COLORS;
 
   return {
@@ -43,7 +49,7 @@ export function getEquityChartOptions() {
       legend: { display: false },
       tooltip: {
         backgroundColor: c.tooltipBg,
-        borderColor: c.positive,
+        borderColor: isPositive ? c.positive : c.negative,
         borderWidth: 1,
         titleColor: "#e2e8f0",
         bodyColor: "#94a3b8",
@@ -78,6 +84,7 @@ export function getEquityChartOptions() {
       y: {
         border: { display: false },
         grid: { color: c.grid },
+        grace: "4%",
         ticks: {
           color: c.tick,
           maxTicksLimit: 6,

@@ -19,7 +19,7 @@ const API = axios.create({
 });
 
 API.interceptors.request.use((config) => {
-  if (import.meta.env.PROD && !API_BASE_URL) {
+  if (import.meta.env.PROD && !isProductionApiConfigured()) {
     const err = new Error("VITE_API_BASE_URL_NOT_SET");
     err.code = "NO_API_BASE";
     return Promise.reject(err);
@@ -102,6 +102,9 @@ export const runBacktest = (symbol) =>
 
 export const getEquity = (runId) =>
   API.get(`/equity/${runId}`, { timeout: 10000, retry: 1 });
+
+export const getRunStatus = (runId) =>
+  API.get(`/run-status/${runId}`, { timeout: 8000, retry: 1 });
 
 export const getLeaderboard = () =>
   API.get("/leaderboard", { timeout: 10000, retry: 1 });

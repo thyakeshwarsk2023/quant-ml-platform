@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -9,8 +10,9 @@ import {
 import TerminalPanel from "./ui/TerminalPanel";
 import SafeResponsiveContainer from "./ui/SafeResponsiveContainer";
 import { FEATURE_CHART_THEME } from "../utils/chartTheme";
+import { getModelMetrics } from "../api/api";
 
-const data = [
+const DEFAULT_DATA = [
   { feature: "Momentum", value: 3228 },
   { feature: "Volume", value: 3212 },
   { feature: "Volatility", value: 3152 },
@@ -18,15 +20,37 @@ const data = [
   { feature: "Trend", value: 3022 },
 ];
 
-const maxVal = Math.max(...data.map((d) => d.value));
-
 export default function FeatureImportance({ embedded = false }) {
+  const [data, setData] = useState(DEFAULT_DATA);
+  const [subtitle, setSubtitle] = useState("Model attribution · LightGBM");
   const h = embedded ? 220 : 320;
+
+  useEffect(() => {
+    let isMounted = true;
+    getModelMetrics()
+      .then((res) => {
+        if (!isMounted) return;
+        const list = res.data?.feature_importances;
+        if (Array.isArray(list) && list.length > 0) {
+          setData(list);
+          setSubtitle("Model attribution · Live ensemble");
+        }
+      })
+      .catch(() => {
+        // Fallback to initial data gracefully
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const maxVal = Math.max(...data.map((d) => Number(d.value) || 0), 100);
 
   return (
     <TerminalPanel
       title="Feature Importance"
-      subtitle="Model attribution · static demo"
+      subtitle={subtitle}
       badge="ML"
       className={embedded ? "" : "min-h-[360px]"}
       bodyClassName="!pb-2"

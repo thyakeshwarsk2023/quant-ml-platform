@@ -24,19 +24,18 @@ def _normalize_database_url(url: str) -> str:
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
-engine = None
-SessionLocal = None
+_engine = None
+_SessionMaker = None
 
 
 def _init_engine() -> None:
-    global engine, SessionLocal
+    global _engine, _SessionMaker
 
-    if SessionLocal is not None:
+    if _SessionMaker is not None:
         return
 
     if not DATABASE_URL:
         logger.warning("DATABASE_URL is not set — database endpoints will fail")
-        SessionLocal = sessionmaker()
         return
 
     normalized = _normalize_database_url(DATABASE_URL)
@@ -63,14 +62,34 @@ def _init_engine() -> None:
             }
         )
 
-    engine = create_engine(normalized, **engine_options)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    _engine = create_engine(normalized, **engine_options)
+    _SessionMaker = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
     logger.info("Database engine initialized")
+
+
+def get_engine():
+    _init_engine()
+    return _engine
+
+
+def __getattr__(name):
+    if name == "engine":
+        _init_engine()
+        return _engine
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+def SessionLocal() -> Session:
+    """Callable session factory that ensures engine is initialized."""
+    _init_engine()
+    if _SessionMaker is None:
+        raise RuntimeError("DATABASE_URL is not configured")
+    return _SessionMaker()
 
 
 def get_db() -> Generator[Session, None, None]:
     _init_engine()
-    if engine is None:
+    if _engine is None:
         raise RuntimeError("DATABASE_URL is not configured")
     db = SessionLocal()
     try:
@@ -82,11 +101,11 @@ def get_db() -> Generator[Session, None, None]:
 def check_database_connection() -> dict:
     """Lightweight DB probe for health checks."""
     _init_engine()
-    if engine is None:
+    if _engine is None:
         return {"ok": False, "error": "DATABASE_URL not configured"}
 
     try:
-        with engine.connect() as conn:
+        with _engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"ok": True}
     except Exception as exc:

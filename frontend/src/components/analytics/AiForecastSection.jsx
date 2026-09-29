@@ -1,5 +1,4 @@
 import {
-  Area,
   ComposedChart,
   Line,
   XAxis,
@@ -24,13 +23,36 @@ export default function AiForecastSection({ forecast, symbol }) {
   const lastClose = forecast?.last_close ?? forecast?.next_day?.last_close;
 
   const chartData = [
-    { label: "Now", date: "spot", price: lastClose, band: [lastClose, lastClose] },
+    ...(lastClose != null
+      ? [
+          {
+            label: "Spot",
+            date: "Now",
+            price: Number(lastClose),
+            lower: Number(lastClose),
+            upper: Number(lastClose),
+          },
+        ]
+      : []),
     ...points.map((p) => ({
       label: shortDate(p.date),
       date: p.date,
-      price: p.price,
-      band: [p.lower, p.upper],
+      price: Number(p.price),
+      lower: Number(p.lower),
+      upper: Number(p.upper),
     })),
+  ];
+
+  // Calculate explicit YAxis bounds spanning price, lower, and upper
+  const allValues = chartData.flatMap((d) =>
+    [d.price, d.lower, d.upper].filter((v) => v != null && Number.isFinite(v))
+  );
+  const minVal = allValues.length ? Math.min(...allValues) : 0;
+  const maxVal = allValues.length ? Math.max(...allValues) : 100;
+  const pad = (maxVal - minVal) * 0.08 || maxVal * 0.04;
+  const yDomain = [
+    Math.max(0, Math.floor(minVal - pad)),
+    Math.ceil(maxVal + pad),
   ];
 
   return (
@@ -56,7 +78,7 @@ export default function AiForecastSection({ forecast, symbol }) {
                   <CartesianGrid {...getRechartsGridProps()} />
                   <XAxis dataKey="label" {...getRechartsAxisProps()} />
                   <YAxis
-                    domain={["auto", "auto"]}
+                    domain={yDomain}
                     {...getRechartsAxisProps()}
                     width={48}
                     tickFormatter={(v) => Number(v).toFixed(0)}
@@ -65,21 +87,45 @@ export default function AiForecastSection({ forecast, symbol }) {
                     {...getRechartsTooltipStyle()}
                     formatter={(v, name) => [
                       formatPrice(v),
-                      name === "band" ? "Range" : "Forecast",
+                      name === "price"
+                        ? "Forecast"
+                        : name === "upper"
+                        ? "Upper Band"
+                        : name === "lower"
+                        ? "Lower Band"
+                        : name,
                     ]}
                   />
-                  <Area
+                  {/* Upper and Lower Confidence Bounds */}
+                  <Line
                     type="monotone"
-                    dataKey="band"
-                    fill="rgba(6,182,212,0.08)"
-                    stroke="none"
+                    dataKey="upper"
+                    name="Upper Band"
+                    stroke="rgba(34, 211, 238, 0.45)"
+                    strokeDasharray="3 3"
+                    dot={false}
+                    strokeWidth={1}
+                    isAnimationActive={false}
                   />
                   <Line
                     type="monotone"
+                    dataKey="lower"
+                    name="Lower Band"
+                    stroke="rgba(34, 211, 238, 0.45)"
+                    strokeDasharray="3 3"
+                    dot={false}
+                    strokeWidth={1}
+                    isAnimationActive={false}
+                  />
+                  {/* Forecast trajectory */}
+                  <Line
+                    type="monotone"
                     dataKey="price"
+                    name="Forecast"
                     stroke={TERMINAL_CHART_COLORS.cyan}
                     strokeWidth={2}
-                    dot={{ r: 2, fill: TERMINAL_CHART_COLORS.cyan }}
+                    dot={{ r: 2.5, fill: TERMINAL_CHART_COLORS.cyan }}
+                    isAnimationActive={false}
                   />
                 </ComposedChart>
               </SafeResponsiveContainer>
@@ -91,7 +137,7 @@ export default function AiForecastSection({ forecast, symbol }) {
           )}
 
           <p className="text-[10px] text-terminal-muted leading-relaxed">
-            Multi-day path extrapolated from next-day LSTM return. Bands are illustrative only.
+            Multi-day path projected with LSTM momentum. Dashed bounds indicate ±1σ volatility corridor.
           </p>
         </div>
       </TerminalPanel>

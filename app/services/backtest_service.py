@@ -464,7 +464,7 @@ def get_equity(db, run_id: int):
             equity
         FROM equity_curve
         WHERE run_id = :id
-        ORDER BY timestamp
+        ORDER BY id ASC
     """), {
         "id": run_id
     })
