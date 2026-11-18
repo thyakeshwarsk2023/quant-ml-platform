@@ -1,19 +1,48 @@
+# Environment & Secrets (NEVER COMMIT)
 .env
-.env.local
-.env.*.local
+.env.*
+*.env
+**/.env
+**/.env.*
+!.env.example
+!frontend/.env.example
+
+# Python Virtual Environments
 .venv/
 venv/
+**/venv/
+**/.venv/
+
+# Python cache & artifacts
 __pycache__/
+**/__pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+
+# Logs
+*.log
+logs/
+
+# Frontend builds and node_modules
+node_modules/
+**/node_modules/
+frontend/dist/
+dist/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
 # Keep cache directory in git for Render cold starts
 data_cache/*
 !data_cache/.gitkeep
 !data_cache/rankings.json
 !data_cache/portfolio.json
-*.log
 
 # ML / local artifacts (uncomment if models should not be in git)
 # app/ml/*.pkl

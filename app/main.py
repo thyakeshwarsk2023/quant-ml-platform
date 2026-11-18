@@ -86,6 +86,17 @@ app.add_middleware(
 
 
 @app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Enforce standard security headers on all responses."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+@app.middleware("http")
 async def request_diagnostics(request: Request, call_next):
     request_id = request.headers.get("x-request-id", str(uuid4()))
     started = perf_counter()
@@ -173,14 +184,16 @@ def health_ready():
     db = check_database_connection()
     status = "ok" if db.get("ok") else "degraded"
     code = 200 if db.get("ok") else 503
+    payload = {
+        "status": status,
+        "database": "connected" if db.get("ok") else "disconnected",
+        "environment": settings.ENVIRONMENT,
+    }
+    if not settings.is_production and not db.get("ok"):
+        payload["error"] = db.get("error")
     return JSONResponse(
         status_code=code,
-        content={
-            "status": status,
-            "database": "connected" if db.get("ok") else "disconnected",
-            "error": db.get("error"),
-            "environment": settings.ENVIRONMENT,
-        },
+        content=payload,
     )
 
 
@@ -193,7 +206,11 @@ def test_db(db: Session = Depends(get_db)):
         return {"database": "connected", "result": result.scalar()}
     except Exception as exc:
         logger.exception("test-db failed")
-        return {"database": "failed", "error": str(exc)}
+        error_msg = str(exc) if not settings.is_production else "Database connection failed"
+        return JSONResponse(
+            status_code=500,
+            content={"database": "failed", "error": error_msg},
+        )
 
 
 app.include_router(router)

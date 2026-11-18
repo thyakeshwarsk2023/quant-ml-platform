@@ -1,6 +1,10 @@
 from app.db.session import engine
 from sqlalchemy import text
 
+if engine is None:
+    print("❌ DATABASE_URL is not configured. Please set DATABASE_URL.")
+    exit(1)
+
 with engine.connect() as conn:
     conn.execute(text("ALTER TABLE metrics ADD COLUMN IF NOT EXISTS ml_score FLOAT DEFAULT 0"))
     conn.commit()

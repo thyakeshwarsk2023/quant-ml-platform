@@ -1,7 +1,8 @@
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException
+    HTTPException,
+    Query,
 )
 
 from sqlalchemy.orm import Session
@@ -170,7 +171,10 @@ def model_evaluate():
 # 🚀 LSTM FORECAST
 # =========================
 @router.get("/forecast")
-def stock_forecast(symbol: str, period: str = "6mo"):
+def stock_forecast(
+    symbol: str = Query(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\.\^_\-]+$"),
+    period: str = Query("6mo", max_length=10, pattern=r"^[0-9]+[a-z]+$|^max$|^ytd$"),
+):
 
     try:
         return get_symbol_forecast(symbol, period=period)
@@ -191,7 +195,10 @@ def stock_forecast(symbol: str, period: str = "6mo"):
 # 🚀 STOCK ANALYTICS
 # =========================
 @router.get("/analytics")
-def stock_analytics(symbol: str, period: str = "1y"):
+def stock_analytics(
+    symbol: str = Query(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\.\^_\-]+$"),
+    period: str = Query("1y", max_length=10, pattern=r"^[0-9]+[a-z]+$|^max$|^ytd$"),
+):
 
     try:
         return get_stock_analytics(symbol, period=period)
@@ -213,7 +220,7 @@ def stock_analytics(symbol: str, period: str = "1y"):
 # =========================
 @router.get("/run-backtest")
 def start_backtest(
-    symbol: str,
+    symbol: str = Query(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\.\^_\-]+$"),
     db: Session = Depends(get_db)
 ):
 
@@ -574,7 +581,7 @@ def leaderboard(
 # 🚀 STOCK RANKINGS
 # =========================
 @router.get("/rankings")
-def rankings(top_k: int = 10):
+def rankings(top_k: int = Query(10, ge=1, le=100)):
     # Render free-tier optimization:
     # Serve precomputed rankings cache and avoid repeated ML inference per request.
     cached = _load_json_cache(RANKINGS_CACHE_PATH)
@@ -634,7 +641,7 @@ def rankings(top_k: int = 10):
 # 🚀 PORTFOLIO
 # =========================
 @router.get("/portfolio")
-def portfolio(top_k: int = 10):
+def portfolio(top_k: int = Query(10, ge=1, le=100)):
     # Render free-tier optimization:
     # Use precomputed portfolio cache to keep endpoint response near-instant.
     cached = _load_json_cache(PORTFOLIO_CACHE_PATH)

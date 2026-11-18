@@ -1,8 +1,10 @@
 import logging
 import os
+import re
 from collections.abc import Generator
 
 from dotenv import load_dotenv
+from fastapi import HTTPException
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -10,6 +12,13 @@ from sqlalchemy.pool import NullPool
 load_dotenv(dotenv_path=".env")
 
 logger = logging.getLogger(__name__)
+
+
+def mask_connection_string(url_or_text: str | None) -> str:
+    """Mask password credentials in database connection URLs or error traces."""
+    if not url_or_text:
+        return ""
+    return re.sub(r"://([^:]+):([^@]+)@", r"://\1:******@", str(url_or_text))
 
 
 def _normalize_database_url(url: str) -> str:
@@ -34,11 +43,19 @@ def _init_engine() -> None:
     if _SessionMaker is not None:
         return
 
-    if not DATABASE_URL:
+    db_url = os.getenv("DATABASE_URL", "").strip() or DATABASE_URL
+    if not db_url:
+        try:
+            from app.core.config import settings
+            db_url = (settings.DATABASE_URL or "").strip()
+        except Exception:
+            pass
+
+    if not db_url:
         logger.warning("DATABASE_URL is not set — database endpoints will fail")
         return
 
-    normalized = _normalize_database_url(DATABASE_URL)
+    normalized = _normalize_database_url(db_url)
     connect_args = {}
     if "sslmode" not in normalized.lower() and (
         "neon.tech" in normalized.lower() or os.getenv("DATABASE_SSL", "").lower() == "true"
@@ -89,8 +106,11 @@ def SessionLocal() -> Session:
 
 def get_db() -> Generator[Session, None, None]:
     _init_engine()
-    if _engine is None:
-        raise RuntimeError("DATABASE_URL is not configured")
+    if _engine is None or _SessionMaker is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection is not configured. Please set DATABASE_URL.",
+        )
     db = SessionLocal()
     try:
         yield db
@@ -99,7 +119,7 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def check_database_connection() -> dict:
-    """Lightweight DB probe for health checks."""
+    """Lightweight DB probe for health checks with sanitized errors."""
     _init_engine()
     if _engine is None:
         return {"ok": False, "error": "DATABASE_URL not configured"}
@@ -110,4 +130,4 @@ def check_database_connection() -> dict:
         return {"ok": True}
     except Exception as exc:
         logger.exception("Database health check failed")
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": mask_connection_string(str(exc))}

@@ -97,14 +97,20 @@ def run_backtest_job(run_id, symbol):
         # =========================
         # MARK COMPLETED
         # =========================
+        final_cap = (
+            float(bt_result.get("equity_curve", [])[-1]["equity"])
+            if bt_result.get("equity_curve")
+            else None
+        )
+
         db.execute(text("""
             UPDATE backtest_runs
             SET status='completed',
-                completed_at=:time
+                final_capital=:final_cap
             WHERE id=:id
         """), {
             "id": run_id,
-            "time": datetime.utcnow()
+            "final_cap": final_cap
         })
 
         db.commit()
