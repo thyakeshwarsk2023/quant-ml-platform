@@ -58,15 +58,22 @@ def get_strategy(
 # =========================
 # 🔥 MARKET FEATURES (LIVE)
 # =========================
-def get_market_features(symbol):
+def get_market_features(symbol_or_df, symbol: str | None = None):
 
+    sym_name = symbol or (symbol_or_df if isinstance(symbol_or_df, str) else "symbol")
     try:
-
-        df = yf.download(
-            symbol,
-            period="3mo",
-            interval="1d"
-        )
+        if isinstance(symbol_or_df, pd.DataFrame):
+            df = symbol_or_df.copy()
+        elif isinstance(symbol_or_df, str):
+            sym_name = symbol_or_df
+            df = yf.download(
+                symbol_or_df,
+                period="3mo",
+                interval="1d",
+                progress=False,
+            )
+        else:
+            return {}
 
         # =========================
         # FIX MULTIINDEX
@@ -82,6 +89,14 @@ def get_market_features(symbol):
 
         if df.empty:
             return {}
+
+        # Fallback columns if missing from caller
+        if "High" not in df.columns and "Close" in df.columns:
+            df["High"] = df["Close"]
+        if "Low" not in df.columns and "Close" in df.columns:
+            df["Low"] = df["Close"]
+        if "Volume" not in df.columns:
+            df["Volume"] = 1000000.0
 
         # =========================
         # FEATURE ENGINEERING
@@ -166,7 +181,7 @@ def get_market_features(symbol):
 
         logger.warning(
             f"Market features failed "
-            f"for {symbol}: {e}"
+            f"for {sym_name}: {e}"
         )
 
         return {}
@@ -178,13 +193,15 @@ def get_market_features(symbol):
 def run_backtest_sync(
     symbol: str,
     strategy_name="hybrid",
-    strategy_params=None
+    strategy_params=None,
+    data: pd.DataFrame | None = None,
 ):
 
     # =========================
     # LOAD DATA
     # =========================
-    data = load_data(symbol)
+    if data is None:
+        data = load_data(symbol)
 
     if data is None or data.empty:
 
@@ -313,11 +330,16 @@ def run_multi_strategy(symbol: str):
     results = []
 
     # =========================
-    # MARKET FEATURES
+    # LOAD DATA ONCE
     # =========================
-    market_features = (
-        get_market_features(symbol)
-    )
+    data = load_data(symbol)
+    if data is None or data.empty:
+        raise ValueError(f"No data for {symbol}")
+
+    # =========================
+    # MARKET FEATURES (REUSE LOADED DATA)
+    # =========================
+    market_features = get_market_features(data, symbol=symbol)
 
     # =========================
     # STRATEGY LOOP
@@ -333,12 +355,13 @@ def run_multi_strategy(symbol: str):
             )
 
             # =========================
-            # BACKTEST
+            # BACKTEST (REUSE LOADED DATA)
             # =========================
             res = run_backtest_sync(
                 symbol=symbol,
                 strategy_name=strategy_name,
-                strategy_params=params
+                strategy_params=params,
+                data=data
             )
 
             # =========================

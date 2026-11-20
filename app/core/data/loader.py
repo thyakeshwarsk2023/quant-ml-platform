@@ -85,10 +85,11 @@ def clean_data(data):
     if data.empty:
         raise ValueError("Data became empty after cleaning")
 
-    # Keep Volume if available (needed for feature engineering)
+    # Keep all available OHLCV columns (needed for feature engineering)
     cols = ["Close"]
-    if "Volume" in data.columns:
-        data["Volume"] = pd.to_numeric(data["Volume"], errors="coerce")
-        cols.append("Volume")
+    for col in ["Open", "High", "Low", "Volume"]:
+        if col in data.columns and col not in cols:
+            data[col] = pd.to_numeric(data[col], errors="coerce")
+            cols.append(col)
 
     return data[cols]
