@@ -74,9 +74,12 @@ def _load_json_cache(path: Path):
 
 
 # =========================
-# 🚀 IN-MEMORY JOB STORE
+# 🚀 IN-MEMORY JOB STORE & CACHES
 # =========================
 scan_jobs = {}
+_leaderboard_cache = {"data": None, "timestamp": 0.0}
+_leaderboard_lock = threading.Lock()
+LEADERBOARD_TTL_SECONDS = 60.0
 
 
 # =========================
@@ -418,6 +421,10 @@ def start_backtest(
 
             local_db.commit()
 
+            # Invalidate leaderboard cache so fresh backtest appears immediately
+            with _leaderboard_lock:
+                _leaderboard_cache["data"] = None
+
             logger.info(
                 f"✅ Completed {symbol} (run {run_id})"
             )
@@ -560,6 +567,12 @@ def leaderboard(
     if str(getattr(settings, "ENABLE_LEADERBOARD", "true")).lower() in {"0", "false", "no"}:
         return []
 
+    import time
+    now = time.time()
+    with _leaderboard_lock:
+        if _leaderboard_cache["data"] is not None and (now - _leaderboard_cache["timestamp"] < LEADERBOARD_TTL_SECONDS):
+            return _leaderboard_cache["data"]
+
     try:
 
         result = db.execute(text("""
@@ -581,8 +594,13 @@ def leaderboard(
         """))
 
         rows = result.fetchall()
+        data = leaderboard_rows(rows, explain_strategy)
 
-        return leaderboard_rows(rows, explain_strategy)
+        with _leaderboard_lock:
+            _leaderboard_cache["data"] = data
+            _leaderboard_cache["timestamp"] = now
+
+        return data
 
     except Exception as e:
 
