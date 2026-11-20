@@ -3,20 +3,53 @@
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
-from datetime import datetime, timedelta
+import threading
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
+
+try:
+    from cachetools import TTLCache
+except ImportError:
+    import time
+    class TTLCache(dict):  # type: ignore[no-redef]
+        def __init__(self, maxsize=256, ttl=600):
+            super().__init__()
+            self._ttl = ttl
+            self._times: dict = {}
+        def __getitem__(self, key):
+            if super().__contains__(key) and time.time() - self._times.get(key, 0) < self._ttl:
+                return super().__getitem__(key)
+            self.pop(key, None)
+            self._times.pop(key, None)
+            raise KeyError(key)
+        def __setitem__(self, key, value):
+            super().__setitem__(key, value)
+            self._times[key] = time.time()
+        def __contains__(self, key):
+            return super().__contains__(key) and time.time() - self._times.get(key, 0) < self._ttl
 
 from app.core.utils.serialize import sanitize_forecast
 from app.ml.lstm_predictor import predict_next_day_forecast
 
 logger = logging.getLogger(__name__)
 
+# Shared 10-minute TTL cache for raw OHLC data across /analytics and /forecast
+_ohlc_lock = threading.Lock()
+_ohlc_cache = TTLCache(maxsize=256, ttl=600)
+
+_analytics_lock = threading.Lock()
+_analytics_cache = TTLCache(maxsize=256, ttl=600)
+
 
 def _load_ohlc(symbol: str, period: str = "1y") -> pd.DataFrame:
+    cache_key = (symbol.strip().upper(), period.strip().lower())
+    with _ohlc_lock:
+        if cache_key in _ohlc_cache:
+            return _ohlc_cache[cache_key].copy()
+
     data = yf.download(
         symbol,
         period=period,
@@ -47,6 +80,10 @@ def _load_ohlc(symbol: str, period: str = "1y") -> pd.DataFrame:
         raise ValueError(f"Empty OHLC series for {symbol}")
 
     data.index = pd.to_datetime(data.index)
+
+    with _ohlc_lock:
+        _ohlc_cache[cache_key] = data.copy()
+
     return data
 
 
@@ -249,9 +286,15 @@ def _safe(value) -> float | None:
     return round(float(value), 4)
 
 
-@lru_cache(maxsize=128)
 def get_stock_analytics(symbol: str, period: str = "1y") -> dict:
     symbol = symbol.strip().upper()
+    period_key = period.strip().lower()
+    cache_key = (symbol, period_key)
+
+    with _analytics_lock:
+        if cache_key in _analytics_cache:
+            return _analytics_cache[cache_key]
+
     df = _load_ohlc(symbol, period=period)
     df = _add_indicators(df)
 
@@ -267,11 +310,11 @@ def get_stock_analytics(symbol: str, period: str = "1y") -> dict:
     last_close = float(last["Close"])
     change_pct = ((last_close - prev_close) / prev_close * 100) if prev_close else 0
 
-    return {
+    result = {
         "status": "success",
         "symbol": symbol,
         "period": period,
-        "as_of": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "quote": {
             "last": round(last_close, 2),
             "change_pct": round(change_pct, 2),
@@ -283,3 +326,8 @@ def get_stock_analytics(symbol: str, period: str = "1y") -> dict:
         "forecast": forecast,
         "recommendation": recommendation,
     }
+
+    with _analytics_lock:
+        _analytics_cache[cache_key] = result
+
+    return result

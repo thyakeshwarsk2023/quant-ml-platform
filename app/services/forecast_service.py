@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.utils.serialize import sanitize_forecast
 from app.ml.lstm_predictor import predict_next_day_forecast
@@ -24,7 +24,7 @@ def get_symbol_forecast(symbol: str, period: str = "6mo") -> dict:
         "status": "success",
         "symbol": symbol,
         "period": period,
-        "as_of": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "last_bar_date": last_bar_date,
         "forecast": forecast,
     }
