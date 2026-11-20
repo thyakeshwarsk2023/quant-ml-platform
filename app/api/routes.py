@@ -85,8 +85,14 @@ scan_jobs = {}
 @router.post("/scan/start")
 def start_scan():
     import uuid
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from app.services.scan_service import process_symbol
     from app.core.data.nifty50 import NIFTY_50
+
+    # Bounded cache eviction to prevent memory leak
+    if len(scan_jobs) > 100:
+        for old_id in list(scan_jobs.keys())[:-50]:
+            scan_jobs.pop(old_id, None)
 
     job_id = str(uuid.uuid4())
     scan_jobs[job_id] = {
@@ -105,15 +111,25 @@ def start_scan():
 
             total = len(symbols)
             results = []
-            for idx, sym in enumerate(symbols):
-                try:
-                    res = process_symbol(sym)
-                    if res:
-                        results.append(res)
-                except Exception as sym_err:
-                    logger.warning("Scan failed for symbol %s: %s", sym, sym_err)
+            completed_count = 0
 
-                scan_jobs[job_id]["progress"] = int(((idx + 1) / total) * 100)
+            # Bounded pool of 4 workers parallelizes scans cleanly
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                future_to_sym = {
+                    executor.submit(process_symbol, sym): sym
+                    for sym in symbols
+                }
+                for future in as_completed(future_to_sym):
+                    sym = future_to_sym[future]
+                    completed_count += 1
+                    try:
+                        res = future.result()
+                        if res:
+                            results.append(res)
+                    except Exception as sym_err:
+                        logger.warning("Scan failed for symbol %s: %s", sym, sym_err)
+
+                    scan_jobs[job_id]["progress"] = int((completed_count / total) * 100)
 
             results.sort(key=lambda x: x.get("score", 0), reverse=True)
             scan_jobs[job_id]["results"] = results
