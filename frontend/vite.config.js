@@ -11,6 +11,29 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    chunkSizeWarningLimit: 900,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (
+              id.includes('chart.js') ||
+              id.includes('react-chartjs-2') ||
+              id.includes('recharts')
+            ) {
+              return 'charts';
+            }
+            if (
+              id.includes('react') ||
+              id.includes('react-dom') ||
+              id.includes('react-router-dom') ||
+              id.includes('axios')
+            ) {
+              return 'vendor';
+            }
+          }
+        },
+      },
+    },
   },
 })
