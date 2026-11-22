@@ -76,7 +76,40 @@ def _load_json_cache(path: Path):
 # =========================
 # 🚀 IN-MEMORY JOB STORE & CACHES
 # =========================
-scan_jobs = {}
+try:
+    from cachetools import TTLCache
+except ImportError:
+    import time
+    class TTLCache(dict):  # type: ignore[no-redef]
+        def __init__(self, maxsize=50, ttl=3600):
+            super().__init__()
+            self._ttl = ttl
+            self._times: dict = {}
+        def __getitem__(self, key):
+            if super().__contains__(key) and time.time() - self._times.get(key, 0) < self._ttl:
+                return super().__getitem__(key)
+            self.pop(key, None)
+            self._times.pop(key, None)
+            raise KeyError(key)
+        def __setitem__(self, key, value):
+            if len(self) >= 50 and key not in self:
+                oldest = min(self._times, key=self._times.get) if self._times else None
+                if oldest:
+                    self.pop(oldest, None)
+                    self._times.pop(oldest, None)
+            super().__setitem__(key, value)
+            self._times[key] = time.time()
+        def get(self, key, default=None):
+            try:
+                return self[key]
+            except KeyError:
+                return default
+        def __contains__(self, key):
+            return super().__contains__(key) and time.time() - self._times.get(key, 0) < self._ttl
+
+scan_jobs_lock = threading.Lock()
+# Bounded LRU/TTL job store (max 50 jobs, 1 hour expiration)
+scan_jobs = TTLCache(maxsize=50, ttl=3600)
 _leaderboard_cache = {"data": None, "timestamp": 0.0}
 _leaderboard_lock = threading.Lock()
 LEADERBOARD_TTL_SECONDS = 60.0
@@ -92,18 +125,14 @@ def start_scan():
     from app.services.scan_service import process_symbol
     from app.core.data.nifty50 import NIFTY_50
 
-    # Bounded cache eviction to prevent memory leak
-    if len(scan_jobs) > 100:
-        for old_id in list(scan_jobs.keys())[:-50]:
-            scan_jobs.pop(old_id, None)
-
     job_id = str(uuid.uuid4())
-    scan_jobs[job_id] = {
-        "status": "running",
-        "progress": 0,
-        "results": [],
-        "error": None
-    }
+    with scan_jobs_lock:
+        scan_jobs[job_id] = {
+            "status": "running",
+            "progress": 0,
+            "results": [],
+            "error": None
+        }
 
     def _worker():
         try:
@@ -132,18 +161,24 @@ def start_scan():
                     except Exception as sym_err:
                         logger.warning("Scan failed for symbol %s: %s", sym, sym_err)
 
-                    scan_jobs[job_id]["progress"] = int((completed_count / total) * 100)
+                    with scan_jobs_lock:
+                        if job_id in scan_jobs:
+                            scan_jobs[job_id]["progress"] = int((completed_count / total) * 100)
 
             results.sort(key=lambda x: x.get("score", 0), reverse=True)
-            scan_jobs[job_id]["results"] = results
-            scan_jobs[job_id]["status"] = "completed"
-            scan_jobs[job_id]["progress"] = 100
+            with scan_jobs_lock:
+                if job_id in scan_jobs:
+                    scan_jobs[job_id]["results"] = results
+                    scan_jobs[job_id]["status"] = "completed"
+                    scan_jobs[job_id]["progress"] = 100
             logger.info("Scan job %s completed with %d results", job_id, len(results))
 
         except Exception as exc:
             logger.exception("Scan job %s failed: %s", job_id, exc)
-            scan_jobs[job_id]["status"] = "failed"
-            scan_jobs[job_id]["error"] = str(exc)
+            with scan_jobs_lock:
+                if job_id in scan_jobs:
+                    scan_jobs[job_id]["status"] = "failed"
+                    scan_jobs[job_id]["error"] = str(exc)
 
     threading.Thread(target=_worker, daemon=True).start()
     return {
@@ -154,7 +189,8 @@ def start_scan():
 
 @router.get("/scan/status/{job_id}")
 def get_scan_status(job_id: str):
-    job = scan_jobs.get(job_id)
+    with scan_jobs_lock:
+        job = scan_jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Scan job not found")
     return {
@@ -167,7 +203,8 @@ def get_scan_status(job_id: str):
 
 @router.get("/scan/results/{job_id}")
 def get_scan_results(job_id: str):
-    job = scan_jobs.get(job_id)
+    with scan_jobs_lock:
+        job = scan_jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Scan job not found")
     return job.get("results", [])
